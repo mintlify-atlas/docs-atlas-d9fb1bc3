@@ -1,0 +1,65 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Yoko",
+  "projectDescription": "A WhatsApp chatbot that acts as a university assistant, combining fuzzy FAQ matching with Groq-powered LLM responses via a Flask webhook.",
+  "theme": "palm",
+  "primaryColor": "#6C63FF",
+  "lightColor": "#EAE8FF",
+  "darkColor": "#3D3799",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/knowledge-base",
+              "concepts/llm-integration"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setup",
+              "guides/whatsapp-webhook",
+              "guides/configuration",
+              "guides/deploying"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api-endpoints",
+              "reference/environment-variables",
+              "reference/faq"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "WhatsApp webhook integration via Meta Cloud API",
+    "Fuzzy matching against a JSON knowledge base for fast FAQ retrieval",
+    "Groq LLaMA3 LLM for context-aware university assistant responses",
+    "Flask-based HTTP server with GET verification and POST message handling",
+    "Simple data.json knowledge base — no database required"
+  ],
+  "publicApiSurface": [
+    "GET /webhook — WhatsApp webhook verification",
+    "POST /webhook — Receive and process incoming WhatsApp messages",
+    "manejar_query(mensaje_usuario) — Orchestrates context lookup and LLM response",
+    "buscar_contexto(pregunta_usuario) — Fuzzy-matches user question against knowledge base",
+    "consultar_llm(contexto, pregunta) — Sends context + question to Groq API and returns answer",
+    "enviar_mensaje(numero, texto) — Sends a WhatsApp text message via Meta Cloud API"
+  ]
+}
