@@ -1,0 +1,194 @@
+---
+title: "Deploying"
+description: "Deploy Yoko to a server for production use"
+---
+
+Meta's webhook will not deliver messages to `localhost`. For production use, Yoko must run on a server with a public HTTPS endpoint that is always available — not a local tunnel that goes down when you close your laptop.
+
+<Warning>
+  Before deploying, remove or disable `debug=True` in `app.run()`. Running Flask's debug mode in production exposes an interactive debugger that allows arbitrary code execution on your server.
+
+  ```python
+  # Change this:
+  app.run(port=5000, debug=True)
+
+  # To this:
+  app.run(port=5000)
+  ```
+</Warning>
+
+<Note>
+  `data.json` is not embedded in the application — it is a plain file read at runtime. Make sure it is included in your repository or copied to the server alongside the Python files, or Yoko will fail to start.
+</Note>
+
+## Deployment options
+
+<Tabs>
+  <Tab title="Railway">
+    [Railway](https://railway.app) auto-detects Python/Flask apps and deploys them with minimal configuration.
+
+    <Steps>
+      <Step title="Create a Railway account">
+        Sign up at [railway.app](https://railway.app) and connect your GitHub account.
+      </Step>
+
+      <Step title="Create a new project">
+        From the Railway dashboard, click **New Project** → **Deploy from GitHub repo** and select your Yoko repository.
+      </Step>
+
+      <Step title="Set environment variables">
+        Go to your service's **Variables** tab and add:
+
+        | Key | Value |
+        |---|---|
+        | `GROQ_API_KEY` | Your Groq API key |
+        | `VERIFY_TOKEN` | Your webhook verify token |
+        | `WHATSAPP_TOKEN` | Your WhatsApp Cloud API access token |
+        | `WHATSAPP_URL` | `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages` |
+
+        Make sure `app.py` and `llm.py` read these from the environment with `os.getenv()` as described in [Configuration](/guides/configuration).
+      </Step>
+
+      <Step title="Deploy">
+        Railway detects Flask and runs the app automatically. Once the deploy succeeds, Railway provides a generated HTTPS URL such as `https://yoko-production.up.railway.app`.
+      </Step>
+
+      <Step title="Update the webhook URL">
+        In the Meta Developer Console, set the Callback URL to:
+
+        ```
+        https://yoko-production.up.railway.app/webhook
+        ```
+
+        Click **Verify and Save** to complete the webhook registration.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Render">
+    [Render](https://render.com) provides free-tier web services with HTTPS included.
+
+    <Steps>
+      <Step title="Create a Render account">
+        Sign up at [render.com](https://render.com) and connect your GitHub account.
+      </Step>
+
+      <Step title="Create a new web service">
+        From the Render dashboard, click **New** → **Web Service**, then connect your Yoko repository.
+      </Step>
+
+      <Step title="Configure the service">
+        Set the following in the service settings:
+
+        - **Runtime**: Python 3
+        - **Start Command**: `python app.py`
+      </Step>
+
+      <Step title="Set environment variables">
+        Go to the **Environment** tab and add:
+
+        | Key | Value |
+        |---|---|
+        | `GROQ_API_KEY` | Your Groq API key |
+        | `VERIFY_TOKEN` | Your webhook verify token |
+        | `WHATSAPP_TOKEN` | Your WhatsApp Cloud API access token |
+        | `WHATSAPP_URL` | `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages` |
+      </Step>
+
+      <Step title="Deploy and update the webhook">
+        Click **Create Web Service**. Once the deploy finishes, Render assigns an HTTPS URL like `https://yoko.onrender.com`. Use this as the Callback URL in the Meta Developer Console:
+
+        ```
+        https://yoko.onrender.com/webhook
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="VPS (Linux)">
+    Deploy to any Linux VPS (Ubuntu, Debian, etc.) using gunicorn and nginx.
+
+    <Steps>
+      <Step title="SSH into your server and clone the repo">
+        ```bash
+        ssh user@your-server-ip
+        git clone https://github.com/juliorbk/yoko.git
+        cd yoko
+        ```
+      </Step>
+
+      <Step title="Set up a virtual environment and install dependencies">
+        ```bash
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install flask requests gunicorn python-dotenv
+        ```
+
+        Create your `.env` file with the production credentials:
+
+        ```bash
+        GROQ_API_KEY=gsk_your_key_here
+        VERIFY_TOKEN=my_secret_token
+        WHATSAPP_TOKEN=your_whatsapp_access_token
+        WHATSAPP_URL=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages
+        ```
+      </Step>
+
+      <Step title="Run with gunicorn">
+        ```bash
+        gunicorn -w 2 -b 0.0.0.0:5000 app:app
+        ```
+
+        `-w 2` starts two worker processes. For a low-traffic university bot, two workers are sufficient.
+      </Step>
+
+      <Step title="Set up nginx as a reverse proxy">
+        Install nginx and create a site configuration:
+
+        ```bash
+        sudo apt install nginx
+        sudo nano /etc/nginx/sites-available/yoko
+        ```
+
+        Paste the following, replacing `your-domain.com`:
+
+        ```
+        server {
+            listen 80;
+            server_name your-domain.com;
+
+            location / {
+                proxy_pass http://127.0.0.1:5000;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+            }
+        }
+        ```
+
+        Enable the site:
+
+        ```bash
+        sudo ln -s /etc/nginx/sites-available/yoko /etc/nginx/sites-enabled/
+        sudo nginx -t && sudo systemctl reload nginx
+        ```
+      </Step>
+
+      <Step title="Add HTTPS with Let's Encrypt">
+        ```bash
+        sudo apt install certbot python3-certbot-nginx
+        sudo certbot --nginx -d your-domain.com
+        ```
+
+        Certbot automatically updates the nginx configuration for HTTPS and sets up auto-renewal.
+
+        Your webhook URL will be:
+
+        ```
+        https://your-domain.com/webhook
+        ```
+
+        Use this in the Meta Developer Console as the Callback URL.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>

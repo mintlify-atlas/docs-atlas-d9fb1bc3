@@ -1,0 +1,73 @@
+---
+title: "Knowledge base"
+description: "How Yoko's data.json FAQ store works"
+---
+
+Yoko's knowledge base is a flat JSON file — `data.json` — containing a list of question/answer pairs. It is the sole source of factual information passed to the LLM. No database or vector store is involved.
+
+## Schema
+
+`data.json` is a top-level array. Each element has exactly two fields:
+
+```json
+[
+  {
+    "pregunta": "¿Cuáles son los requisitos para inscribirse?",
+    "respuesta": "Para inscribirse necesitas tu cédula de identidad, foto tipo carnet y pago de aranceles."
+  },
+  {
+    "pregunta": "¿Cuándo comienzan las clases?",
+    "respuesta": "Las clases del período 2025-I comienzan el 15 de febrero."
+  }
+]
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `pregunta` | string | The canonical question text used for matching |
+| `respuesta` | string | The full answer returned as context to the LLM |
+
+## Fuzzy matching algorithm
+
+When a user message arrives, `mcp.buscar_contexto` loads the entire `data.json` file and extracts all `pregunta` values. It then runs:
+
+```python
+difflib.get_close_matches(pregunta_usuario, preguntas, n=1, cutoff=0.4)
+```
+
+- `n=1` — returns at most one match
+- `cutoff=0.4` — a similarity ratio below 0.4 produces no match
+
+`difflib.get_close_matches` uses Python's `SequenceMatcher` under the hood, which computes a ratio based on the longest common subsequences between the input and each candidate. A ratio of 1.0 is an exact match; 0.0 is completely dissimilar.
+
+<Tip>
+  Write `pregunta` values using the same phrasing and vocabulary your users are likely to type. Shorter, direct questions match more reliably than long or formally worded ones.
+</Tip>
+
+## What happens when no match is found
+
+If no question in `data.json` scores above 0.4, `buscar_contexto` returns the string `"No se encontró información relevante."`. This fallback string is still forwarded to the LLM as context, so the model will respond based on its system prompt instruction to use only the provided information — typically resulting in a polite statement that the information is not available.
+
+```python
+def buscar_contexto(pregunta_usuario):
+    with open("data.json", "r", encoding="utf-8") as f:
+        base = json.load(f)
+    preguntas = [item["pregunta"] for item in base]
+    mas_parecida = difflib.get_close_matches(pregunta_usuario, preguntas, n=1, cutoff=0.4)
+    if mas_parecida:
+        for item in base:
+            if item["pregunta"] == mas_parecida[0]:
+                return item["respuesta"]
+    return "No se encontró información relevante."
+```
+
+## Best practices for writing entries
+
+- **Use canonical phrasing.** Write `pregunta` the way users actually phrase it in WhatsApp — informal, short, with common abbreviations if applicable.
+- **One question per entry.** Do not combine multiple questions into a single `pregunta` field; the fuzzy matcher compares the entire string.
+- **Keep answers self-contained.** The `respuesta` is injected directly into the LLM prompt. It should be complete enough to answer the question without additional context.
+- **Avoid duplicate phrasings.** Multiple very similar questions can cause unpredictable match results. Consolidate them into one entry with a comprehensive answer.
+
+<Warning>
+  `data.json` is read from disk on every incoming request. Avoid letting the file grow too large. For deployments with hundreds of entries, consider caching the loaded data in memory between requests.
+</Warning>

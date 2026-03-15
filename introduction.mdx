@@ -1,0 +1,71 @@
+---
+title: "Introduction"
+description: "What Yoko is and how it works"
+---
+
+Yoko is a WhatsApp chatbot that answers university-related questions using a local knowledge base and a large language model. Students send messages through WhatsApp; Yoko looks up the closest matching answer in a JSON file, passes it as context to an LLM, and returns a natural-language reply — all in real time.
+
+<Note>
+  You must set your `GROQ_API_KEY`, WhatsApp Bearer token, and `VERIFY_TOKEN` before running Yoko. The server will start without them, but all incoming messages will fail silently.
+</Note>
+
+## How it works
+
+Each incoming WhatsApp message travels through three components before a response is sent back:
+
+1. **`app.py`** receives the message via a Meta webhook, extracts the sender's number and message text, and calls the context layer.
+2. **`mcp.py`** searches `data.json` for the closest matching question using fuzzy string matching, then passes the matched answer as context to the LLM.
+3. **`llm.py`** sends the context and the user's question to the Groq API (Llama 3) and returns the generated response.
+
+## Components
+
+### Flask webhook — `app.py`
+
+`app.py` is the entry point for all WhatsApp traffic. It exposes a single `/webhook` route:
+
+- **GET** — used by Meta to verify the webhook during setup. The server compares `hub.verify_token` against `VERIFY_TOKEN` and echoes back `hub.challenge`.
+- **POST** — receives message payloads from Meta. The server extracts the message body and sender number from the nested JSON structure, calls `manejar_query`, and sends the response back via the WhatsApp Cloud API.
+
+### Context layer — `mcp.py`
+
+`mcp.py` bridges raw user input and the LLM. `buscar_contexto` loads `data.json` and uses Python's `difflib.get_close_matches` with a similarity cutoff of `0.4` to find the most relevant pre-written answer. That answer becomes the system context passed to the LLM, keeping responses grounded in university-specific information.
+
+### LLM integration — `llm.py`
+
+`llm.py` calls the [Groq](https://groq.com) chat completions API using the `llama3-8b-8192` model. The system prompt instructs the model to answer using only the provided context. Temperature is set to `0.3` for consistent, factual replies.
+
+## Knowledge base — `data.json`
+
+The knowledge base is a JSON array of objects, each with a `pregunta` (question) and `respuesta` (answer) field:
+
+```json
+[
+  {
+    "pregunta": "¿Cuándo es el período de inscripciones?",
+    "respuesta": "El período de inscripciones para el semestre 2026-1 es del 10 al 20 de enero de 2026."
+  },
+  {
+    "pregunta": "¿Dónde queda la biblioteca?",
+    "respuesta": "La biblioteca central está ubicada en el Edificio B, segundo piso, abierta de lunes a viernes de 7am a 9pm."
+  }
+]
+```
+
+The fuzzy matcher compares incoming messages against the `pregunta` field. The matched `respuesta` is injected into the LLM system prompt as the sole source of truth for that interaction.
+
+## Explore
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Yoko running locally in under 10 minutes.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Deep dive into how the webhook, context layer, and LLM fit together.
+  </Card>
+  <Card title="Setup guide" icon="wrench" href="/guides/setup">
+    Configure your Meta app, WhatsApp number, and webhook in production.
+  </Card>
+  <Card title="API endpoints" icon="code" href="/reference/api-endpoints">
+    Reference for the `/webhook` GET and POST endpoints.
+  </Card>
+</CardGroup>

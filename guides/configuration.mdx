@@ -1,0 +1,145 @@
+---
+title: "Configuration"
+description: "Configure Yoko's API keys, model, and knowledge base"
+---
+
+All of Yoko's configurable values are spread across three files. The table below summarises each one; detailed notes follow.
+
+| Variable | File | Default |
+|---|---|---|
+| `VERIFY_TOKEN` | `app.py` | `""` (empty) |
+| WhatsApp API `url` | `app.py` | `""` (empty) |
+| `Authorization` Bearer token | `app.py` | `""` (empty) |
+| `GROQ_API_KEY` | `llm.py` | `""` (empty) |
+| `GROQ_MODEL` | `llm.py` | `"llama3-8b-8192"` |
+| `data.json` path | `mcp.py` | `"data.json"` |
+| `cutoff` | `mcp.py` | `0.4` |
+| `temperature` | `llm.py` | `0.3` |
+
+## app.py
+
+**`VERIFY_TOKEN`**
+
+A shared secret string used during webhook verification. Meta sends this value in the `hub.verify_token` query parameter of the initial GET request. Yoko returns the challenge only when the tokens match. Set it to any non-empty string and use the same value in the Meta Developer Console.
+
+```python
+VERIFY_TOKEN = "my_secret_token"
+```
+
+**WhatsApp API `url`** (inside `enviar_mensaje`)
+
+The Graph API endpoint Yoko posts outgoing messages to. The format is:
+
+```
+https://graph.facebook.com/v17.0/PHONE_NUMBER_ID/messages
+```
+
+Replace `PHONE_NUMBER_ID` with the numeric ID shown in your WhatsApp Business Account in the Meta Developer Console.
+
+**`Authorization` Bearer token** (inside `enviar_mensaje`)
+
+Your WhatsApp Cloud API access token. You can find or generate this in the Meta Developer Console under **WhatsApp** → **API Setup**.
+
+```python
+"Authorization": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+```
+
+## llm.py
+
+**`GROQ_API_KEY`**
+
+Your API key from [console.groq.com](https://console.groq.com). Required for all LLM calls.
+
+```python
+GROQ_API_KEY = "gsk_your_key_here"
+```
+
+**`GROQ_MODEL`**
+
+The Groq model used to generate responses. Defaults to `llama3-8b-8192`, which is fast and free-tier eligible. You can change this to any model available in your Groq account, for example `llama3-70b-8192` for higher quality at the cost of latency.
+
+```python
+GROQ_MODEL = "llama3-8b-8192"
+```
+
+**`temperature`**
+
+Controls how deterministic the LLM output is. The current value is `0.3`, which produces consistent, factual answers — appropriate for a university FAQ assistant. Increase toward `1.0` for more varied responses.
+
+```python
+"temperature": 0.3
+```
+
+## mcp.py
+
+**`data.json` path**
+
+The knowledge base path is hardcoded as `"data.json"` in `buscar_contexto`. The file must exist in the working directory from which you run `app.py`. If you move `data.json` elsewhere, update the `open()` call in `mcp.py`:
+
+```python
+with open("data.json", "r", encoding="utf-8") as f:
+```
+
+**`cutoff`** (in `buscar_contexto`)
+
+The minimum similarity score required for `difflib.get_close_matches` to return a result. The current value is `0.4`. Lower it (e.g. `0.3`) to match more loosely worded questions; raise it (e.g. `0.6`) to require closer matches and reduce false positives.
+
+```python
+mas_parecida = difflib.get_close_matches(pregunta_usuario, preguntas, n=1, cutoff=0.4)
+```
+
+## Using environment variables
+
+<Tip>
+  Keep secrets out of source code by storing them in a `.env` file and loading them with [python-dotenv](https://pypi.org/project/python-dotenv/).
+</Tip>
+
+Create a `.env` file in the project root (and add it to `.gitignore`):
+
+```bash
+GROQ_API_KEY=gsk_your_key_here
+VERIFY_TOKEN=my_secret_token
+WHATSAPP_TOKEN=your_whatsapp_access_token
+WHATSAPP_URL=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages
+```
+
+Install the package:
+
+```bash
+pip install python-dotenv
+```
+
+Then load variables at the top of each file. Here is the updated `llm.py`:
+
+```python
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = "llama3-8b-8192"
+```
+
+And in `app.py`:
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
+```
+
+Inside `enviar_mensaje`:
+
+```python
+def enviar_mensaje(numero, texto):
+    url = os.getenv("WHATSAPP_URL", "")
+    headers = {
+        "Authorization": f"Bearer {os.getenv('WHATSAPP_TOKEN', '')}",
+        "Content-Type": "application/json"
+    }
+```

@@ -1,0 +1,137 @@
+---
+title: "Local setup"
+description: "Install and run Yoko on your machine"
+---
+
+## Prerequisites
+
+Before you begin, make sure you have the following:
+
+- Python 3.8 or higher
+- `pip` (comes with Python)
+- A [Groq API key](https://console.groq.com)
+- A Meta Developer account with WhatsApp Cloud API access
+
+## Steps
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/juliorbk/yoko.git && cd yoko
+    ```
+  </Step>
+
+  <Step title="Create and activate a virtual environment">
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash
+        python3 -m venv venv && source venv/bin/activate
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```bash
+        python -m venv venv && venv\Scripts\activate
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Install dependencies">
+    There is no `requirements.txt` yet, so install the packages manually:
+
+    ```bash
+    pip install flask requests
+    ```
+  </Step>
+
+  <Step title="Create data.json">
+    Yoko uses `data.json` as its knowledge base. Create this file in the project root with at least a few university FAQ entries:
+
+    ```json
+    [
+      {
+        "pregunta": "¿Cuándo es el período de matrícula?",
+        "respuesta": "El período de matrícula para el semestre 2025-1 es del 10 al 20 de enero de 2025. Puedes realizarla a través del portal estudiantil en matricula.universidad.edu."
+      },
+      {
+        "pregunta": "¿Cómo solicito una constancia de estudios?",
+        "respuesta": "Debes ingresar al portal estudiantil, ir a la sección 'Documentos' y seleccionar 'Constancia de estudios'. El documento estará disponible para descarga en un plazo de 24 horas hábiles."
+      },
+      {
+        "pregunta": "¿Cuál es el horario de la biblioteca?",
+        "respuesta": "La biblioteca central atiende de lunes a viernes de 7:00 a.m. a 9:00 p.m. y los sábados de 8:00 a.m. a 2:00 p.m. Los domingos permanece cerrada."
+      }
+    ]
+    ```
+
+    Each entry has a `pregunta` (question) and a `respuesta` (answer). The fuzzy matcher in `mcp.py` compares incoming messages against the `pregunta` fields to find the closest match.
+  </Step>
+
+  <Step title="Set your Groq API key">
+    Open `llm.py` and replace the empty string with your key:
+
+    ```python
+    GROQ_API_KEY = "gsk_your_key_here"
+    ```
+
+    You can get a key from [console.groq.com](https://console.groq.com).
+  </Step>
+
+  <Step title="Configure WhatsApp credentials in app.py">
+    Open `app.py` and fill in the three placeholders:
+
+    1. **`VERIFY_TOKEN`** — any secret string you choose; you will use the same value in the Meta Developer Console when setting up the webhook:
+       ```python
+       VERIFY_TOKEN = "my_secret_token"
+       ```
+
+    2. **WhatsApp API URL** — replace the empty `url` string in `enviar_mensaje` with your endpoint (substitute your Phone Number ID):
+       ```python
+       url = "https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages"
+       ```
+
+    3. **Bearer token** — replace the placeholder `Authorization` header value with your WhatsApp Cloud API access token:
+       ```python
+       "Authorization": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+       ```
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    python app.py
+    ```
+
+    Flask starts on `http://localhost:5000`. The `/webhook` endpoint is now ready to receive requests.
+  </Step>
+</Steps>
+
+<Warning>
+  Never commit API keys or tokens to version control. If you push `app.py` or `llm.py` with credentials hardcoded, anyone with access to the repository can use your accounts and incur charges on your behalf.
+</Warning>
+
+<Tip>
+  Use [python-dotenv](https://pypi.org/project/python-dotenv/) to keep secrets out of source files. Create a `.env` file in the project root:
+
+  ```bash
+  GROQ_API_KEY=gsk_your_key_here
+  VERIFY_TOKEN=my_secret_token
+  WHATSAPP_TOKEN=your_whatsapp_token
+  WHATSAPP_URL=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages
+  ```
+
+  Install the package and load it at the top of each file:
+
+  ```bash
+  pip install python-dotenv
+  ```
+
+  ```python
+  from dotenv import load_dotenv
+  import os
+
+  load_dotenv()
+  GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+  ```
+
+  Add `.env` to your `.gitignore` so it is never committed.
+</Tip>

@@ -1,97 +1,55 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Yoko"
+description: "A WhatsApp university assistant powered by Groq LLaMA3 and fuzzy FAQ matching"
 ---
 
-## Setting up
+Yoko is a WhatsApp chatbot that answers university-related questions. It receives messages through the WhatsApp Cloud API, searches a local JSON knowledge base using fuzzy matching, and generates context-aware answers using the Groq LLaMA3 language model.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Yoko running locally in under 10 minutes
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand how the webhook, MCP layer, and LLM fit together
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="WhatsApp Webhook" icon="webhook" href="/guides/whatsapp-webhook">
+    Configure Meta's Cloud API to send messages to Yoko
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/reference/api-endpoints">
+    Explore the webhook endpoints and internal functions
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How it works
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Message arrives">
+    A user sends a WhatsApp message to your registered phone number. Meta's Cloud API forwards it to Yoko's `/webhook` endpoint as a POST request.
+  </Step>
+  <Step title="Context lookup">
+    Yoko's MCP layer uses Python's `difflib` to find the closest matching question in your `data.json` knowledge base (cutoff similarity: 0.4).
+  </Step>
+  <Step title="LLM response">
+    The matched context and the user's original question are sent to the Groq API using the `llama3-8b-8192` model. The response is generated with a temperature of 0.3 for consistent answers.
+  </Step>
+  <Step title="Reply sent">
+    The generated answer is sent back to the user via the WhatsApp Cloud API using `enviar_mensaje`.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Key features
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Fuzzy FAQ matching" icon="magnifying-glass">
+    Uses `difflib.get_close_matches` to find relevant answers even when questions are phrased differently
+  </Card>
+  <Card title="Groq LLaMA3 LLM" icon="brain">
+    Low-latency inference via the Groq API with the `llama3-8b-8192` model
+  </Card>
+  <Card title="No database required" icon="file">
+    Knowledge base lives in a plain `data.json` file — easy to edit and version-control
+  </Card>
+  <Card title="WhatsApp Cloud API" icon="whatsapp">
+    Native integration with Meta's webhook and messaging APIs
+  </Card>
+</CardGroup>

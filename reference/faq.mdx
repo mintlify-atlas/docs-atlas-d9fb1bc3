@@ -1,0 +1,107 @@
+---
+title: "FAQ"
+description: "Frequently asked questions about Yoko"
+---
+
+<AccordionGroup>
+  <Accordion title="Why does Yoko always return OK even when an error occurs?">
+    Meta's Cloud API retries webhook deliveries that return a non-`200` status code. If Yoko crashed or returned a `500`, Meta would keep retrying the same message — potentially flooding your server.
+
+    Returning `200 OK` unconditionally stops the retry loop. Errors are still visible: `traceback.print_exc()` in `app.py` prints the full stack trace to stdout so you can diagnose problems in your server logs.
+  </Accordion>
+
+  <Accordion title="What happens if no match is found in data.json?">
+    `buscar_contexto` in `mcp.py` returns the string `"No se encontró información relevante."` when `difflib.get_close_matches` finds no question above the `0.4` cutoff.
+
+    This string is still passed to `consultar_llm` as context. The LLM may try to answer from its own training data rather than staying silent. To reduce this, the system prompt explicitly instructs the model: `"responde usando solo esta información"`. For stricter behavior, you could check whether the context equals the fallback string and skip the LLM call entirely.
+  </Accordion>
+
+  <Accordion title="How do I change the similarity threshold for FAQ matching?">
+    Edit the `cutoff` parameter in `buscar_contexto` in `mcp.py`:
+
+    ```python
+    mas_parecida = difflib.get_close_matches(pregunta_usuario, preguntas, n=1, cutoff=0.4)
+    ```
+
+    | Value | Effect |
+    | --- | --- |
+    | `0.2` | More permissive — matches loosely similar questions, higher chance of irrelevant results |
+    | `0.4` | Default — balanced matching |
+    | `0.6` | Stricter — requires closer matches, more frequent fallback to "no information found" |
+
+    Values must be between `0` and `1`.
+  </Accordion>
+
+  <Accordion title="Can I use a different Groq model?">
+    Yes. Change `GROQ_MODEL` in `llm.py`:
+
+    ```python
+    GROQ_MODEL = "llama3-8b-8192"
+    ```
+
+    Groq supports several models:
+
+    | Model | Notes |
+    | --- | --- |
+    | `llama3-8b-8192` | Default. Fast, lightweight. |
+    | `llama3-70b-8192` | More capable but higher latency. |
+    | `mixtral-8x7b-32768` | Longer context window (32k tokens). |
+
+    See Groq's model documentation for the full list of available models and their context limits.
+  </Accordion>
+
+  <Accordion title="Why is data.json loaded on every request?">
+    The current implementation in `buscar_contexto` opens and reads `data.json` on each call:
+
+    ```python
+    with open("data.json", "r", encoding="utf-8") as f:
+        base = json.load(f)
+    ```
+
+    For small knowledge bases this is acceptable. For larger files, or under high message volume, consider loading the data once at startup and storing it in a module-level variable:
+
+    ```python
+    with open("data.json", "r", encoding="utf-8") as f:
+        BASE_CONOCIMIENTO = json.load(f)
+
+    def buscar_contexto(pregunta_usuario):
+        preguntas = [item["pregunta"] for item in BASE_CONOCIMIENTO]
+        ...
+    ```
+
+    This eliminates repeated disk I/O but means changes to `data.json` require a server restart to take effect.
+  </Accordion>
+
+  <Accordion title="How do I add support for image or voice messages?">
+    Currently only `text` messages are handled. When a non-text message arrives (image, audio, document, etc.), the line:
+
+    ```python
+    mensaje = entry["messages"][0]["text"]["body"]
+    ```
+
+    raises a `KeyError` because `"text"` is not present. This is caught by the `except Exception` block and logged, and Yoko returns `200 OK` without replying.
+
+    To handle other types gracefully, add a type check before accessing `.text.body`:
+
+    ```python
+    message = entry["messages"][0]
+    if message.get("type") == "text":
+        mensaje = message["text"]["body"]
+        numero = message["from"]
+        respuesta = manejar_query(mensaje)
+        if respuesta:
+            enviar_mensaje(numero, respuesta)
+    ```
+
+    You can extend the `if` block with `elif message.get("type") == "image":` etc. to handle additional types.
+  </Accordion>
+
+  <Accordion title="The webhook verification keeps failing — what should I check?">
+    Work through these checks in order:
+
+    1. **Token match:** Confirm `VERIFY_TOKEN` in `app.py` is exactly equal to the Verify Token field in the Meta Developer Console. The comparison is case-sensitive and whitespace-sensitive.
+    2. **Public URL:** Meta sends the `GET` request from its own servers. `localhost:5000` is not reachable externally. Use a tunnel (e.g. ngrok) or deploy to a public server.
+    3. **HTTPS:** Meta requires HTTPS for production webhooks. During development, ngrok provides a valid HTTPS URL automatically.
+    4. **Correct path:** The registered webhook URL must end with `/webhook` to match the Flask route.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,99 @@
+---
+title: "Environment variables"
+description: "Configuration values for Yoko"
+---
+
+Yoko currently stores all configuration as hardcoded string literals in the source files. The variables below should be moved to a `.env` file before deploying to any environment beyond local development.
+
+<Warning>
+  Never commit `.env` to version control. Add `.env` to your `.gitignore` immediately. Leaked tokens give anyone full access to your WhatsApp number and Groq account.
+</Warning>
+
+## Variables
+
+<ParamField path="GROQ_API_KEY" type="string" required>
+  API key for authenticating requests to the Groq LLM API. Currently hardcoded in `llm.py`:
+
+  ```python
+  GROQ_API_KEY = ""
+  ```
+
+  Obtain a key at [console.groq.com](https://console.groq.com). Keys begin with `gsk_`.
+</ParamField>
+
+<ParamField path="VERIFY_TOKEN" type="string" required>
+  Shared secret used to verify incoming webhook requests from Meta. Currently hardcoded in `app.py`:
+
+  ```python
+  VERIFY_TOKEN = ""
+  ```
+
+  Choose any string and enter the same value in the Meta Developer Console under **Webhooks → Edit → Verify Token**. The comparison is case-sensitive.
+</ParamField>
+
+<ParamField path="WHATSAPP_API_URL" type="string" required>
+  The WhatsApp Cloud API messages endpoint for your phone number. Currently hardcoded as an empty string in `enviar_mensaje` in `app.py`:
+
+  ```python
+  url = ""
+  ```
+
+  Format:
+
+  ```
+  https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages
+  ```
+
+  Replace `{PHONE_NUMBER_ID}` with the numeric ID shown in the Meta Developer Console under **WhatsApp → API Setup**.
+</ParamField>
+
+<ParamField path="WHATSAPP_TOKEN" type="string" required>
+  Bearer token for authenticating requests to the WhatsApp Cloud API. Currently hardcoded in `enviar_mensaje` in `app.py`:
+
+  ```python
+  headers = {"Authorization": "Bearer", ...}
+  ```
+
+  Use the temporary access token from the Meta Developer Console for testing, or a permanent System User token for production. Tokens begin with `EAA`.
+</ParamField>
+
+---
+
+## Recommended `.env` file
+
+Create a `.env` file at the project root:
+
+```
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxx
+VERIFY_TOKEN=my_secret_token
+WHATSAPP_API_URL=https://graph.facebook.com/v17.0/747XXXXXXXXX/messages
+WHATSAPP_TOKEN=EAAxxxxxxxxxxxxxxxx
+```
+
+---
+
+## Loading variables in Python
+
+Install `python-dotenv`:
+
+```bash
+pip install python-dotenv
+```
+
+Then load the variables at the top of each file that needs them:
+
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
+WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL", "")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
+```
+
+<Note>
+  `load_dotenv()` is a no-op when the variables are already set in the environment (e.g. on a cloud platform). This means the same code works both locally with a `.env` file and in production with real environment variables.
+</Note>

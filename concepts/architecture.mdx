@@ -1,0 +1,92 @@
+---
+title: "Architecture"
+description: "How Yoko's components fit together"
+---
+
+Yoko is composed of three layers that work in sequence to receive a WhatsApp message, find relevant university information, and return a grounded response.
+
+<CardGroup cols={3}>
+  <Card title="Transport layer" icon="webhook">
+    `app.py` — Flask server receiving WhatsApp Cloud API webhooks on port 5000
+  </Card>
+  <Card title="Context layer" icon="database">
+    `mcp.py` — Fuzzy matching against `data.json` using `difflib`
+  </Card>
+  <Card title="LLM layer" icon="brain">
+    `llm.py` — Groq API call to `llama3-8b-8192` to generate the final response
+  </Card>
+</CardGroup>
+
+## Request flow
+
+<Steps>
+  <Step title="WhatsApp sends a POST request">
+    When a user sends a message, Meta's WhatsApp Cloud API delivers a POST request to `POST /webhook` on Yoko's Flask server (port 5000).
+  </Step>
+  <Step title="app.py extracts the message">
+    The webhook handler parses `entry[0].changes[0].value.messages[0]` to extract the message body and the sender's phone number.
+  </Step>
+  <Step title="manejar_query is called">
+    `mcp.manejar_query(mensaje)` is invoked with the raw message text.
+  </Step>
+  <Step title="buscar_contexto performs fuzzy matching">
+    `buscar_contexto` loads `data.json` and runs `difflib.get_close_matches` to find the most similar question in the knowledge base (cutoff 0.4).
+  </Step>
+  <Step title="consultar_llm generates a response">
+    The matched answer is passed as context to `llm.consultar_llm`, which calls the Groq API with the `llama3-8b-8192` model at temperature 0.3.
+  </Step>
+  <Step title="enviar_mensaje delivers the reply">
+    `app.enviar_mensaje(numero, respuesta)` posts the generated text back to the user via the WhatsApp Cloud API.
+  </Step>
+</Steps>
+
+## Webhook verification
+
+Before Meta delivers any messages, it verifies the webhook endpoint with a GET request containing two query parameters:
+
+- `hub.verify_token` — a secret token you configure in both Meta's dashboard and `app.py`
+- `hub.challenge` — a random string Meta expects you to echo back
+
+If the received token matches `VERIFY_TOKEN`, the server returns the challenge value with HTTP 200. Otherwise it returns HTTP 403.
+
+```python
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        token_enviado = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if token_enviado == VERIFY_TOKEN:
+            return challenge, 200
+        return "Token inválido", 403
+```
+
+## Incoming POST body structure
+
+Meta sends the following JSON payload when a user messages Yoko:
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "XXXXXXXXX",
+    "changes": [{
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": {
+          "display_phone_number": "1555XXXXXXX",
+          "phone_number_id": "747XXXXXXX"
+        },
+        "messages": [{
+          "from": "584120000000",
+          "text": { "body": "user message here" }
+        }]
+      },
+      "field": "messages"
+    }]
+  }]
+}
+```
+
+<Note>
+  The message text and sender number are accessed at `entry[0].changes[0].value.messages[0]`. Yoko reads `.text.body` for the content and `.from` for the recipient phone number used to send the reply.
+</Note>

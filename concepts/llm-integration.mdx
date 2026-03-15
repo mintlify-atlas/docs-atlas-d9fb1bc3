@@ -1,0 +1,97 @@
+---
+title: "LLM integration"
+description: "How Yoko uses Groq and LLaMA3 to generate responses"
+---
+
+Yoko uses the [Groq](https://groq.com) inference API to run the `llama3-8b-8192` model. Groq exposes an OpenAI-compatible endpoint, so the request format mirrors the OpenAI Chat Completions API.
+
+## Model configuration
+
+| Parameter | Value | Effect |
+|---|---|---|
+| Model | `llama3-8b-8192` | LLaMA 3 8B parameter model with an 8 192-token context window |
+| Endpoint | `https://api.groq.com/openai/v1/chat/completions` | OpenAI-compatible Groq endpoint |
+| Temperature | `0.3` | Low value biases the model toward consistent, factual output |
+
+<Note>
+  A temperature of 0.3 is intentionally low. It reduces the model's tendency to embellish or hallucinate and produces more deterministic answers — well suited for FAQ-style university queries where accuracy matters more than creativity.
+</Note>
+
+## System prompt and grounding pattern
+
+The key design choice in Yoko's LLM integration is **context grounding**: the answer retrieved from `data.json` is injected directly into the system prompt, instructing the model to respond using only that information.
+
+System prompt template:
+
+```
+Eres un asistente universitario responde usando solo esta información: {contexto}
+```
+
+This constrains the LLM to the knowledge base entry matched by `mcp.buscar_contexto`. The model is not relying on its parametric knowledge — it is restating and reformulating the provided `contexto`.
+
+## Messages array
+
+The full payload sent to the Groq API on each request:
+
+```python
+messages = [
+    {
+        "role": "system",
+        "content": f"Eres un asistente universitario responde usando solo esta información: {contexto}"
+    },
+    {
+        "role": "user",
+        "content": pregunta
+    }
+]
+
+data = {
+    "model": "llama3-8b-8192",
+    "messages": messages,
+    "temperature": 0.3
+}
+```
+
+## Full integration code
+
+```python
+import os
+import requests
+
+GROQ_API_KEY = ""
+GROQ_MODEL = "llama3-8b-8192"
+
+def consultar_llm(contexto, pregunta):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    messages = [
+        {"role": "system", "content": f"Eres un asistente universitario responde usando solo esta información: {contexto}"},
+        {"role": "user", "content": pregunta}
+    ]
+    data = {
+        "model": GROQ_MODEL,
+        "messages": messages,
+        "temperature": 0.3
+    }
+    response = requests.post(url, headers=headers, json=data)
+    result = response.json()
+    if "choices" in result:
+        return result["choices"][0]["message"]["content"]
+    return "No se pudo generar una respuesta."
+```
+
+## Error handling
+
+Yoko handles two failure cases in `consultar_llm`:
+
+| Condition | Returned string |
+|---|---|
+| Groq API returns a response body without a `choices` key (e.g., auth error, rate limit) | `"No se pudo generar una respuesta."` |
+| Network or HTTP error before a parseable response is received | Exception propagates to `app.py`'s `except` block, which logs the traceback and returns HTTP 200 to Meta without sending a reply |
+
+<Tip>
+  You can adapt the system prompt for different contexts without changing any other code. For example, scope it to a specific faculty (`"Eres un asistente de la Facultad de Ingeniería..."`) or switch the response language by appending `"Responde siempre en inglés."` to the system message.
+</Tip>
